@@ -27,6 +27,11 @@ const handlebars = require("handlebars");
 let app = express();
 let http = app.listen(process.env.PORT || 8080);
 
+var ExpressBrute = require('express-brute');
+
+var store = new ExpressBrute.MemoryStore(); // stores state locally, don't use this in production
+var bruteforce = new ExpressBrute(store);
+
 app.set("views", path.join(__dirname, "views"));
 app.engine("handlebars", hbs({
     partialsDir: path.join(__dirname, "views", "partials"),
@@ -67,7 +72,7 @@ app.use("/filesize", express.static(path.join(__dirname, "node_modules/filesize/
 app.use("/assets", express.static(path.join(__dirname, "assets")));
 
 app.use(session({
-    secret: "meowmeow"    
+    secret: "meowmeow"
 }));
 app.use(flash());
 app.use(busboy());
@@ -91,10 +96,11 @@ app.get("/@logout", (req, res) => {
 app.get("/@login", (req, res) => {
     res.render("login", flashify(req, {}));
 });
-app.post("/@login", (req, res) => {
-    let pass = notp.totp.verify(req.body.token.replace(" ", ""), KEY);
-    console.log(pass, req.body.token.replace(" ", ""));
-    if (pass) {
+app.post("/@login", bruteforce.prevent, (req, res) => {
+    // let pass = notp.totp.verify(req.body.token.replace(" ", ""), KEY);
+    // console.log(pass, req.body.token.replace(" ", ""));
+    // if()
+    if (req.body.token === KEY) {
         req.session.login = true;
         res.redirect("/");
         return;
@@ -171,7 +177,7 @@ app.put("/*", (req, res) => {
                 });
                 save.on("error", (err) => {
                     res.flash("error", err);
-                    res.redirect("back");    
+                    res.redirect("back");
                 });
             }
         });
@@ -313,8 +319,8 @@ app.post("/*@delete", (req, res) => {
                 let op = null;
                 if (f.isdirectory) {
                     op = (dir, cb) => rimraf(dir, {
-						glob: false
-					}, cb);
+                        glob: false
+                    }, cb);
                 }
                 else if (f.isfile) {
                     op = fs.unlink;
@@ -330,31 +336,31 @@ app.post("/*@delete", (req, res) => {
             });
         });
         Promise.all(promises).then(() => {
-            req.flash("success", "Files deleted. ");    
+            req.flash("success", "Files deleted. ");
             res.redirect("back");
         }).catch((err) => {
-            req.flash("error", "Unable to delete some files: " + err);    
+            req.flash("error", "Unable to delete some files: " + err);
             res.redirect("back");
         });
     }).catch((err) => {
-        req.flash("error", err);    
+        req.flash("error", err);
         res.redirect("back");
     });
 });
 
 app.get("/*@download", (req, res) => {
     res.filename = req.params[0];
-    
+
     let files = null;
     try {
         files = JSON.parse(req.query.files);
-    } catch (e) {}
+    } catch (e) { }
     if (!files || !files.map) {
         req.flash("error", "No files selected.");
         res.redirect("back");
         return; // res.status(400).end();
     }
-    
+
     let promises = files.map(f => {
         return new Promise((resolve, reject) => {
             fs.stat(relative(res.filename, f), (err, stats) => {
@@ -371,7 +377,7 @@ app.get("/*@download", (req, res) => {
     });
     Promise.all(promises).then((files) => {
         let zip = archiver.create("zip", {});
-        zip.on("error", function(err) {
+        zip.on("error", function (err) {
             res.status(500).send({
                 error: err.message
             });
@@ -390,7 +396,7 @@ app.get("/*@download", (req, res) => {
         zip.finalize();
     }).catch((err) => {
         console.log(err);
-        req.flash("error", err);    
+        req.flash("error", err);
         res.redirect("back");
     });
 });
@@ -429,7 +435,7 @@ if (shellable || cmdable) {
             }));
         });
     });
-    
+
     const pty = require("node-pty");
     const io = require("socket.io")(http);
 
@@ -518,7 +524,7 @@ app.get("/*", (req, res) => {
                     cmdable: cmdable,
                     path: res.filename,
                     files: files,
-                }));    
+                }));
             }).catch((err) => {
                 res.render("list", flashify(req, {
                     shellable: shellable,
@@ -542,8 +548,8 @@ app.get("/*", (req, res) => {
     }
     else if (res.stats.isFile()) {
         res.sendFile(relative(res.filename), {
-			dotfiles: "allow"
-		});
+            dotfiles: "allow"
+        });
     }
 });
 
